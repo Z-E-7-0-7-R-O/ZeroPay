@@ -354,6 +354,10 @@ This is an initial version and it is not flawless. The following known limitatio
 17. **Public API surface.** `AddressGenerator`, `UtxoEngine`, `TrvmEngine`, `ScannerFactory`, `TronScanner`, and `UtxoScanner` are not exported from `src/index.ts`. The `dev` and `start` scripts execute the entry point, which only exports modules and performs no action.
 18. **Dependencies.** `bip39` is listed in `package.json` but is not imported by the current source code. `tronweb` is loaded with `require` and is not type-checked. `ethers` version 5 is used only for address computation.
 19. **Test scope.** Tests rely on mocked network responses. Behavior against live blockchain APIs, real wallet-exported xPubs, and production load has not been verified in this repository.
+20. **Demo store is a local simulation.** `demo-store/server.ts` is not a production reference. The webhook secret, xPub, port (3000), invoice amount, and currency are hard-coded, the library is imported from `../src` rather than from a built package, and the `/checkout` endpoint has no authentication and does not associate the invoice with an order or customer. The simulation xPub is the same value used by the unit tests in `tests/core.test.ts`; funds must not be sent to addresses derived from it.
+21. **Demo webhook handler does not verify signatures.** It logs the `x-zeropay-signature` header and the parsed body and returns HTTP 200. Because the body is parsed by `express.json()` before the handler runs, the raw request string required for signature verification is not retained. The inline comment about preventing webhook retries does not correspond to library behavior, since the library does not retry webhooks (see item 10).
+22. **Demo Litecoin configuration is not functional.** The same xPub, which uses the standard `xpub` serialization, is assigned to `xpubLitecoin`. The demo only creates TRON invoices. A Litecoin invoice created with this key would fail at address derivation, because Litecoin derivation requires the `Ltub` serialization.
+23. **Demo inherits the library limitations.** The demo uses `MemoryStorage`, so the limitations above apply to it, including loss of invoices and derivation indices on restart and silent error handling. This README does not document an end-to-end run of the demo against a live network.
 
 --------------------------------------------------------------------------------
 
@@ -368,33 +372,50 @@ This is an initial version and it is not flawless. The following known limitatio
 **Dependencies (from `package.json`):**
 * **Runtime:** `axios ^1.6.0`, `bip32 ^4.0.0`, `bip39 ^3.1.0`, `bitcoinjs-lib ^6.1.5`, `ethers ^5.7.2`, `tiny-secp256k1 ^2.2.3`, `tronweb ^5.3.0`.
 * **Development:** `typescript ^5.3.2`, `ts-node ^10.9.1`, `jest ^29.7.0`, `ts-jest ^29.1.1`, `@types/jest`, `@types/node`, `eslint ^8.54.0`, `@typescript-eslint/eslint-plugin` and `@typescript-eslint/parser ^6.13.1`, `prettier ^3.1.0`.
+* **Demo store (`demo-store/package.json`, optional):** runtime `express ^4.18.2`; development `@types/express ^4.17.21`, `ts-node ^10.9.1`, `typescript ^5.3.2`.
 
 **Compilation & Build Instructions:**
 
 1. **Obtain the source:** clone the repository and change into its directory.
-   ```bash
+```bash
    git clone <repository-url>
    cd <repository-directory>
-   ```
+```
 2. **Install dependencies:**
-   ```bash
+```bash
    npm install
-   ```
+```
 3. **Build:** compiles `src/` to `dist/` using `tsc`.
-   ```bash
+```bash
    npm run build
-   ```
+```
 4. **Run tests:**
-   ```bash
+```bash
    npm test
-   ```
+```
 5. **Lint and format (optional):**
-   ```bash
+```bash
    npm run lint
    npm run format
-   ```
+```
+6. **Run the demo store (optional):** the demo imports the library from `../src`, so the dependencies of the repository root (step 2) must be installed first.
+```bash
+   cd demo-store
+   npm install
+   npm start
+```
 
 The package entry points are `dist/index.js` (`main`) and `dist/index.d.ts` (`types`). The package name is `zeropay-core`; how it is installed into a consuming project (local path, registry, or repository reference) is left to the integrator.
+
+**Demo Store (Optional Local Simulation):**
+
+The `demo-store` directory contains a small Express server that simulates a merchant backend using ZeroPay. It starts the polling loop with a 15,000 ms interval and listens on `http://localhost:3000`. After `npm start`, an invoice can be requested by sending a POST request, for example:
+
+```bash
+curl -X POST http://localhost:3000/checkout
+```
+
+The response is a JSON object with a `message` field and an `invoiceData` field containing the generated invoice (a 50.00 USDT invoice on TRON). `POST /webhook` is the endpoint registered as `webhookUrl`; it prints the received signature header and payload to the console and returns HTTP 200. The demo uses hard-coded simulation values (see Assumptions & Limitations, items 20 to 23) and must not be used with real funds.
 
 **Usage Example:**
 
