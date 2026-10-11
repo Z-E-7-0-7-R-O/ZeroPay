@@ -327,7 +327,7 @@ This is the initial version of ZeroPay (1.0.0). It is not complete and it is not
 * **Five-layer verification module** with unit tests for each layer and the orchestrator. It is implemented as a standalone component and is not part of the polling pipeline.
 * **Configuration validation** and **in-memory storage**.
 
-The library has not been independently audited. The results of `npm test` (4 suites, 43 tests, all passing) are listed in the Tests section; these tests rely on mocked network responses.
+The library has not been independently audited. The results of `npm test` (4 suites, 43 tests, all passing) are listed under the Tests entry of the Source Code Modules section; these tests rely on mocked network responses.
 
 --------------------------------------------------------------------------------
 
