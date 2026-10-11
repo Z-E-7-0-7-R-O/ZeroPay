@@ -193,7 +193,28 @@ Status progression: `PENDING -> DETECTED -> CONFIRMED`, or `PENDING -> EXPIRED`.
 * **Tests ([core.test.ts](tests/core.test.ts), [engines.test.ts](tests/engines.test.ts), [scanners.test.ts](tests/scanners.test.ts), [security.test.ts](tests/security.test.ts))**
   * **Role:** Jest Unit and Integration Tests.
   * **Implementation:** Cover configuration validation, in-memory storage behavior, webhook signature generation and verification, invoice creation and polling state, address derivation for all three networks (including uniqueness of 100 consecutive TRON addresses), scanner behavior with mocked axios responses, and each of the five verification layers and the orchestrator with mocked HTTP responses.
-  * **Recorded Output (`npm test`):** Unmodified console output of the test run (4 test suites, 43 tests, all passed). The tests use mocked network responses and do not exercise live blockchain APIs.
+
+<table>
+  <thead>
+    <tr>
+      <th align="left">Test Suite</th>
+      <th align="left">Scope</th>
+      <th align="right">Tests</th>
+      <th align="right">Result</th>
+      <th align="right">Suite Time</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td><code>tests/core.test.ts</code></td><td>ConfigManager, MemoryStorage, WebhookManager, ZeroPayClient</td><td align="right">11</td><td align="right">PASS</td><td align="right">6.873 s</td></tr>
+    <tr><td><code>tests/engines.test.ts</code></td><td>UtxoEngine, TrvmEngine, AddressGenerator, collision resistance</td><td align="right">8</td><td align="right">PASS</td><td align="right">10.296 s</td></tr>
+    <tr><td><code>tests/scanners.test.ts</code></td><td>TronScanner, UtxoScanner, ScannerFactory</td><td align="right">6</td><td align="right">PASS</td><td align="right">not reported</td></tr>
+    <tr><td><code>tests/security.test.ts</code></td><td>Verification layers 1 to 5, AntiCounterfeitEngine</td><td align="right">18</td><td align="right">PASS</td><td align="right">5.115 s</td></tr>
+    <tr><td><b>Total</b></td><td>4 suites</td><td align="right"><b>43</b></td><td align="right"><b>43 passed</b></td><td align="right"><b>11.669 s</b></td></tr>
+  </tbody>
+</table>
+
+<details>
+<summary><b>Raw test output (<code>npm test</code>): 4 suites passed, 43 tests passed. Click to expand or collapse.</b></summary>
 
 ```text
 D:\Zero\Project\TypeScript.Nodsjs\ZeroPay> npm test
@@ -281,6 +302,8 @@ Ran all test suites.
 Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
 PS D:\Zero\Project\TypeScript.Nodsjs\ZeroPay>
 ```
+
+</details>
 
 * **Project Configuration**
   * **Role:** Build, Lint, Format, and Test Settings.
