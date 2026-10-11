@@ -193,6 +193,94 @@ Status progression: `PENDING -> DETECTED -> CONFIRMED`, or `PENDING -> EXPIRED`.
 * **Tests ([core.test.ts](tests/core.test.ts), [engines.test.ts](tests/engines.test.ts), [scanners.test.ts](tests/scanners.test.ts), [security.test.ts](tests/security.test.ts))**
   * **Role:** Jest Unit and Integration Tests.
   * **Implementation:** Cover configuration validation, in-memory storage behavior, webhook signature generation and verification, invoice creation and polling state, address derivation for all three networks (including uniqueness of 100 consecutive TRON addresses), scanner behavior with mocked axios responses, and each of the five verification layers and the orchestrator with mocked HTTP responses.
+  * **Recorded Output (`npm test`):** Unmodified console output of the test run (4 test suites, 43 tests, all passed). The tests use mocked network responses and do not exercise live blockchain APIs.
+
+```text
+D:\Zero\Project\TypeScript.Nodsjs\ZeroPay> npm test
+
+> zeropay-core@1.0.0 test
+> jest
+
+ PASS  tests/scanners.test.ts
+  Blockchain Scanners and Factory
+    TronScanner
+      √ should detect incoming TRC20 USDT transfer when amount matches exactly (15 ms)
+      √ should return null if no matching transactions are returned by TronGrid (1 ms)
+      √ should fail silently and return null on network exception
+    UtxoScanner
+      √ should detect unconfirmed UTXO transaction in mempool and set status to DETECTED (1 ms)
+      √ should confirm UTXO transaction when confirmations meet requirement (1 ms)
+    ScannerFactory
+      √ should correctly route TRON invoices to TronScanner and UTXO invoices to UtxoScanner (1 ms)
+
+ PASS  tests/security.test.ts (5.115 s)
+  Anti-Counterfeit & Anti-Flash Subsystem
+    Layer 1: ContractWhitelist
+      √ should approve official Tether contract in Base58 format (8 ms)
+      √ should approve official Tether contract in Hex format
+      √ should reject spoofed or fake contract addresses (1 ms)
+      √ should safely reject empty or non-string inputs
+    Layer 2: TvmReceiptValidator
+      √ should validate successful execution receipt with contractRet SUCCESS (1 ms)
+      √ should reject transactions that were reverted or ran out of energy
+      √ should reject malformed or empty execution payloads
+    Layer 3: AbiDecoder
+      √ should decode genuine transfer(address,uint256) data and match parameters (3 ms)
+      √ should reject transaction if method selector is not transfer (e.g. approve 095ea7b3) (1 ms)
+      √ should reject transaction if transfer amount does not match invoice requirements
+      √ should reject transaction if recipient address does not match invoice receiving address (1 ms)
+    Layer 4: StateQueryValidator
+      √ should query on-chain balance and confirm sufficiency using mocked HTTP client (2 ms)
+    Layer 5: ConsensusFinalityValidator
+      √ should verify transaction finality when block number is below or equal to solidified block (1 ms)
+    AntiCounterfeitEngine Pipeline Orchestrator
+      √ should completely approve transaction passing all 5 verification layers (1 ms)
+      √ should halt and fail at Layer 1 if counterfeit contract is detected (1 ms)
+      √ should halt and fail at Layer 2 if transaction execution failed in TVM (1 ms)
+      √ should halt and fail at Layer 3 if ABI parameters mismatch invoice (1 ms)
+      √ should halt and fail at Layer 5 if block is unsolidified (1 ms)
+
+ PASS  tests/core.test.ts (6.873 s)
+  Core Orchestration and Utilities
+    ConfigManager
+      √ should validate complete configuration and apply deterministic defaults (10 ms)
+      √ should throw an error if webhookSecret is empty or missing (15 ms)
+      √ should throw an error if webhookUrl has an invalid protocol (1 ms)
+      √ should throw an error if xPub format fails length boundary check (1 ms)
+    MemoryStorage
+      √ should atomically retrieve and increment derivation indices per network
+      √ should persist, retrieve, and update invoice records correctly (1 ms)
+      √ should accurately filter active invoices (PENDING and DETECTED)
+    WebhookManager
+      √ should generate valid HMAC-SHA256 signature and dispatch POST payload (2 ms)
+      √ should return false when destination server returns HTTP error status
+    ZeroPayClient
+      √ should construct an invoice atomically with valid cryptographic address and metadata (106 ms)
+      √ should manage polling cycle interval state safely (2 ms)
+
+ PASS  tests/engines.test.ts (10.296 s)
+  Cryptographic Address Derivation Engines
+    UtxoEngine
+      √ should derive valid Native SegWit addresses for Litecoin (20 ms)
+      √ should derive valid Legacy P2PKH addresses for Dogecoin (11 ms)
+      √ should throw an error if an unsupported network is requested (12 ms)
+    TrvmEngine
+      √ should derive valid Base58Check addresses for TRON (143 ms)
+      √ should throw an error if a non-TRON network is passed to TrvmEngine (3 ms)
+    AddressGenerator Facade
+      √ should route derivation requests correctly across all supported networks (46 ms)
+      √ should throw explicit error when an xPub is missing from the configuration (2 ms)
+    Checkpoint Alpha: Mathematical Collision Resistance
+      √ should derive 100 consecutive TRON addresses with 100% uniqueness (3256 ms)
+
+Test Suites: 4 passed, 4 total
+Tests:       43 passed, 43 total
+Snapshots:   0 total
+Time:        11.669 s
+Ran all test suites.
+Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
+PS D:\Zero\Project\TypeScript.Nodsjs\ZeroPay>
+```
 
 * **Project Configuration**
   * **Role:** Build, Lint, Format, and Test Settings.
