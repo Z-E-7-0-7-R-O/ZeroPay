@@ -305,6 +305,10 @@ PS D:\Zero\Project\TypeScript.Nodsjs\ZeroPay>
 
 </details>
 
+* **[server.ts](demo-store/server.ts)**
+  * **Role:** Local Merchant Simulation Server (Demo Store).
+  * **Implementation:** An Express application in the separate `demo-store` package (`demo-store/package.json`, private, depends on `express ^4.18.2`, started with `ts-node server.ts`) that imports `ZeroPayClient`, `Currency`, `Network`, and `IZeroPayConfig` directly from `../src`. It builds a configuration with a hard-coded simulation xPub (assigned to both `xpubTron` and `xpubLitecoin`), a hard-coded `webhookSecret`, `webhookUrl` set to `http://localhost:3000/webhook`, `defaultExpirationMinutes` of 15, and `defaultConfirmations` of 1. It creates a `ZeroPayClient` with the default `MemoryStorage` and calls `startPolling(15000)` at startup. It exposes `POST /checkout`, which creates a fixed 50.00 USDT invoice on TRON and returns it as JSON (HTTP 200) or returns the error message (HTTP 500), and `POST /webhook`, which logs the `x-zeropay-signature` header and the body parsed by `express.json()` to the console and responds with HTTP 200 `OK` without verifying the signature. The server listens on port 3000 (hard-coded).
+
 * **Project Configuration**
   * **Role:** Build, Lint, Format, and Test Settings.
   * **Implementation:** `tsconfig.json` (strict compiler options, `rootDir` `./src`, `outDir` `./dist`, declaration output, `noUnusedLocals`, `noUnusedParameters`), `jest.config.js` (`ts-jest` preset, Node test environment, tests matched by `**/tests/**/*.test.ts`), `.eslintrc.json` (`@typescript-eslint` recommended rules, `no-explicit-any` as error), `.prettierrc` (single quotes, trailing commas, print width 100), and `.gitignore`.
