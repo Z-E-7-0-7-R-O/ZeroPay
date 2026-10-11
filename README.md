@@ -381,8 +381,8 @@ This is an initial version and it is not flawless. The following known limitatio
 
 1. **Obtain the source:** clone the repository and change into its directory.
 ```bash
-   git clone <[repository-url](https://github.com/Z-E-7-0-7-R-O/ZeroPay)>
-   cd <ZeroPay>
+   git clone https://github.com/Z-E-7-0-7-R-O/ZeroPay
+   cd ZeroPay
 ```
 2. **Install dependencies:**
 ```bash
