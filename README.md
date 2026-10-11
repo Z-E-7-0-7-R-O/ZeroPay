@@ -6,7 +6,7 @@
 <div align="center">
 <i>A TypeScript library for generating deterministic per-invoice receiving addresses from extended public keys (xPub) and monitoring incoming payments on TRON, Litecoin, and Dogecoin.</i>
 <br><br>
-<b>Developer:</b> Zero <br>
+<b>Developer:</b> Zero-AI-Native (Age 15, assisted by Google Gemini 3.1 Pro) <br>
 <b>Package:</b> zeropay-core 1.0.0 (MIT License)<br>
 <b>Architecture:</b> TypeScript / Node.js / BIP32 Hierarchical Deterministic Address Derivation<br>
 <b>Status:</b> Initial Version (functional core, known limitations documented below)
