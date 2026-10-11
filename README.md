@@ -327,7 +327,7 @@ This is the initial version of ZeroPay (1.0.0). It is not complete and it is not
 * **Five-layer verification module** with unit tests for each layer and the orchestrator. It is implemented as a standalone component and is not part of the polling pipeline.
 * **Configuration validation** and **in-memory storage**.
 
-The library has not been independently audited. Test suites are included but their results are not documented in this README.
+The library has not been independently audited. The results of `npm test` (4 suites, 43 tests, all passing) are listed in the Tests section; these tests rely on mocked network responses.
 
 --------------------------------------------------------------------------------
 
@@ -358,6 +358,9 @@ This is an initial version and it is not flawless. The following known limitatio
 21. **Demo webhook handler does not verify signatures.** It logs the `x-zeropay-signature` header and the parsed body and returns HTTP 200. Because the body is parsed by `express.json()` before the handler runs, the raw request string required for signature verification is not retained. The inline comment about preventing webhook retries does not correspond to library behavior, since the library does not retry webhooks (see item 10).
 22. **Demo Litecoin configuration is not functional.** The same xPub, which uses the standard `xpub` serialization, is assigned to `xpubLitecoin`. The demo only creates TRON invoices. A Litecoin invoice created with this key would fail at address derivation, because Litecoin derivation requires the `Ltub` serialization.
 23. **Demo inherits the library limitations.** The demo uses `MemoryStorage`, so the limitations above apply to it, including loss of invoices and derivation indices on restart and silent error handling. This README does not document an end-to-end run of the demo against a live network.
+24. **Scan window and matching scope.** `TronScanner` requests with `limit=5` and evaluates only the transactions returned by the API. Neither scanner compares a transaction timestamp with the invoice creation time, so any transaction to the receiving address with a matching amount is accepted. A payment can be missed if it is not among the returned transactions, and an earlier payment of the same amount to a re-issued address (see item 7) could be matched.
+25. **Receipt validation edge case.** `TvmReceiptValidator` rejects a payload only when `ret` and `receipt` are both absent. A payload with an empty `ret` array and no `receipt` is accepted.
+26. **Test runner configuration.** `jest.config.js` sets `forceExit: true`, which explains the "Force exiting Jest" message in the test output. Open handles are not investigated.
 
 --------------------------------------------------------------------------------
 
