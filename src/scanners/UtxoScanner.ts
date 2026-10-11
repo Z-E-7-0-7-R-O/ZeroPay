@@ -13,6 +13,7 @@ export class UtxoScanner {
   // Prefixing the parameter with an underscore (_config) instructs the TypeScript compiler
   // to intentionally ignore the 'noUnusedParameters' rule for this specific variable,
   // maintaining compatibility with the ScannerFactory instantiation.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   constructor(_config: IZeroPayConfig) {
     // Initialize Axios client. BlockCypher limits unauthenticated requests to 3 per second.
     // In a production environment with high volume, a token should be passed in the config.
