@@ -479,6 +479,6 @@ The request body is the JSON serialization of the invoice object (`id`, `amount`
 
 ## License
 
-Released under the MIT License, as declared in `package.json`.
-
+   Released under the MIT License. See the [LICENSE](LICENSE) file and the `license` field in `package.json`.
+   
 --------------------------------------------------------------------------------
