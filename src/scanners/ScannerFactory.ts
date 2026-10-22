@@ -6,14 +6,17 @@
 import { IInvoice, IZeroPayConfig, Network } from '../types';
 import { TronScanner } from './TronScanner';
 import { UtxoScanner } from './UtxoScanner';
+import { MoneroScanner } from './MoneroScanner';
 
 export class ScannerFactory {
   private tronScanner: TronScanner;
   private utxoScanner: UtxoScanner;
+  private moneroScanner: MoneroScanner;
 
   constructor(config: IZeroPayConfig) {
     this.tronScanner = new TronScanner(config);
     this.utxoScanner = new UtxoScanner(config);
+    this.moneroScanner = new MoneroScanner(config);
   }
 
   /**
@@ -30,6 +33,10 @@ export class ScannerFactory {
     
     if (invoice.network === Network.LITECOIN || invoice.network === Network.DOGECOIN) {
       return this.utxoScanner.scanForPayment(invoice, requiredConfirmations);
+    }
+
+    if (invoice.network === Network.MONERO) {
+      return this.moneroScanner.scanForPayment(invoice, requiredConfirmations);
     }
 
     throw new Error(`Unsupported network in ScannerFactory: ${invoice.network}`);

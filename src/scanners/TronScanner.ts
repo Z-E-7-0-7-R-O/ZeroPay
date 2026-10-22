@@ -5,6 +5,7 @@
 
 import axios, { AxiosInstance } from 'axios';
 import { IInvoice, IZeroPayConfig, InvoiceStatus, Currency } from '../types';
+import { CryptoUtils } from '../utils/crypto';
 
 export class TronScanner {
   private apiClient: AxiosInstance;
@@ -65,8 +66,8 @@ export class TronScanner {
 
     const transactions = response.data.data;
     
-    // USDT has 6 decimals on TRON. We convert the invoice amount to its integer representation.
-    const expectedValueRaw = Math.floor(parseFloat(invoice.amount) * 1_000_000).toString();
+    // USDT has 6 decimals on TRON. We convert the invoice amount to its exact base unit representation.
+    const expectedValueRaw = CryptoUtils.amountToBaseUnits(invoice.amount, 6).toString();
 
     for (const tx of transactions) {
       // Match the transaction value with the expected invoice amount
@@ -120,7 +121,7 @@ export class TronScanner {
     }
 
     const transactions = response.data.data;
-    const expectedSunRaw = Math.floor(parseFloat(invoice.amount) * 1_000_000).toString();
+    const expectedSunRaw = CryptoUtils.amountToBaseUnits(invoice.amount, 6).toString();
 
     for (const tx of transactions) {
       // Ensure the transaction is a TransferContract (native TRX transfer)

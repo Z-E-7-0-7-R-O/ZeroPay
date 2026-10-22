@@ -4,6 +4,7 @@
  */
 
 import * as crypto from 'crypto';
+import { MoneroCryptoUtils } from './moneroCrypto';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const TronWeb = require('tronweb');
@@ -113,5 +114,31 @@ export class CryptoUtils {
     }
 
     return false;
+  }
+
+  /**
+   * Validates the structural, cryptographic (Ed25519 curve), and Keccak-256 checksum
+   * integrity of a Monero Mainnet address (Primary '4...', Subaddress '8...', or Integrated).
+   */
+  public static isValidMoneroAddress(address: string): boolean {
+    if (!address || typeof address !== 'string') {
+      return false;
+    }
+
+    try {
+      MoneroCryptoUtils.decodeMoneroAddress(address);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Deterministically converts a decimal amount string into atomic blockchain base units
+   * (e.g., 12 decimals for Monero Piconero, 8 for LTC/DOGE Satoshis, 6 for TRON Sun/USDT)
+   * without IEEE-754 floating-point precision loss.
+   */
+  public static amountToBaseUnits(amount: string, decimals: number): bigint {
+    return MoneroCryptoUtils.parseDecimalToUnits(amount, decimals);
   }
 }

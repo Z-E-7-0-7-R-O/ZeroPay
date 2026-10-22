@@ -16,6 +16,7 @@ export class ZeroPayClient {
   private storage: IStorageAdapter;
   private scannerFactory: ScannerFactory;
   private pollingIntervalId?: NodeJS.Timeout;
+  private isPollingCycleRunning: boolean = false;
 
   constructor(config: IZeroPayConfig, storageAdapter?: IStorageAdapter) {
     // Process, validate, and apply defaults via ConfigManager
@@ -25,6 +26,9 @@ export class ZeroPayClient {
   }
 
   public async createInvoice(amount: string, currency: Currency, network: Network): Promise<IInvoice> {
+    this.validateAmountFormat(amount);
+    this.validateCurrencyNetworkPair(currency, network);
+
     const index = await this.storage.getLatestDerivationIndex(network);
     const receivingAddress = AddressGenerator.generate(this.config, network, index);
 
@@ -33,7 +37,7 @@ export class ZeroPayClient {
     
     const invoice: IInvoice = {
       id: crypto.randomUUID(),
-      amount: amount,
+      amount: amount.trim(),
       currency: currency,
       network: network,
       receivingAddress: receivingAddress,
@@ -66,15 +70,39 @@ export class ZeroPayClient {
     }
   }
 
+  private validateAmountFormat(amount: string): void {
+    if (!amount || typeof amount !== 'string' || !/^\d+(\.\d+)?$/.test(amount.trim())) {
+      throw new Error('Invalid invoice amount: "amount" must be a valid positive decimal string.');
+    }
+    if (parseFloat(amount) <= 0) {
+      throw new Error('Invalid invoice amount: "amount" must be strictly greater than zero.');
+    }
+  }
+
+  private validateCurrencyNetworkPair(currency: Currency, network: Network): void {
+    const validPairs: Record<Network, Currency[]> = {
+      [Network.TRON]: [Currency.USDT, Currency.TRX],
+      [Network.LITECOIN]: [Currency.LTC],
+      [Network.DOGECOIN]: [Currency.DOGE],
+      [Network.MONERO]: [Currency.XMR],
+    };
+
+    const allowedCurrencies = validPairs[network];
+    if (!allowedCurrencies || !allowedCurrencies.includes(currency)) {
+      throw new Error(
+        `Incompatible currency and network combination: ${currency} is not supported on ${network}.`,
+      );
+    }
+  }
+
   private async executePollingCycle(): Promise<void> {
+    if (this.isPollingCycleRunning) {
+      return;
+    }
+
+    this.isPollingCycleRunning = true;
     try {
-      let activeInvoices: IInvoice[] = [];
-      
-      if (this.storage instanceof MemoryStorage) {
-        activeInvoices = await (this.storage as MemoryStorage).getActiveInvoices();
-      } else {
-        throw new Error('Active invoice retrieval logic must be implemented in the custom storage adapter.');
-      }
+      const activeInvoices = await this.storage.getActiveInvoices();
 
       for (const invoice of activeInvoices) {
         if (Date.now() > invoice.expiresAt && invoice.status === InvoiceStatus.PENDING) {
@@ -86,7 +114,12 @@ export class ZeroPayClient {
         const updatedInvoice = await this.scannerFactory.scan(invoice, requiredConfirmations);
 
         if (updatedInvoice) {
-          await this.storage.updateInvoiceStatus(updatedInvoice.id, updatedInvoice.status, updatedInvoice.txHash);
+          await this.storage.updateInvoiceStatus(
+            updatedInvoice.id,
+            updatedInvoice.status,
+            updatedInvoice.txHash,
+            updatedInvoice.confirmations,
+          );
 
           if (updatedInvoice.status === InvoiceStatus.CONFIRMED && this.config.webhookUrl) {
             await WebhookManager.dispatch(updatedInvoice, this.config.webhookUrl, this.config.webhookSecret);
@@ -95,6 +128,8 @@ export class ZeroPayClient {
       }
     } catch (error) {
       // Polling cycle suppresses unhandled errors to avoid crashing the event loop
+    } finally {
+      this.isPollingCycleRunning = false;
     }
   }
 }

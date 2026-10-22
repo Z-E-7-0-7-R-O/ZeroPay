@@ -6,6 +6,7 @@
 import { Network, IZeroPayConfig } from '../types';
 import { UtxoEngine } from './UtxoEngine';
 import { TrvmEngine } from './TrvmEngine';
+import { CryptonoteEngine } from './CryptonoteEngine';
 
 export class AddressGenerator {
   /**
@@ -35,6 +36,19 @@ export class AddressGenerator {
           throw new Error('TRON xPub is missing in the configuration.');
         }
         return TrvmEngine.generateAddress(config.xpubTron, index, network);
+
+      case Network.MONERO:
+        if (!config.moneroPublicSpendKey || !config.moneroPrivateViewKey) {
+          throw new Error(
+            'Monero public spend key or private view key is missing in the configuration.',
+          );
+        }
+        return CryptonoteEngine.generateAddress(
+          config.moneroPublicSpendKey,
+          config.moneroPrivateViewKey,
+          index,
+          network,
+        );
         
       default:
         throw new Error(`Unsupported network in AddressGenerator: ${network}`);

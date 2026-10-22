@@ -12,10 +12,18 @@ app.use(express.json());
 // A mathematically valid Extended Public Key (xPub) for cryptographic simulation
 const SIMULATION_XPUB = 'xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8';
 
+// Mathematically valid Ed25519 Monero simulation keys (Public Spend Key B and Private View Key a)
+const SIMULATION_MONERO_PUBLIC_SPEND_KEY =
+  '5866666666666666666666666666666666666666666666666666666666666666';
+const SIMULATION_MONERO_PRIVATE_VIEW_KEY =
+  '0100000000000000000000000000000000000000000000000000000000000000';
+
 // Initialize the configuration for the merchant
 const config: IZeroPayConfig = {
   xpubTron: SIMULATION_XPUB,
   xpubLitecoin: SIMULATION_XPUB,
+  moneroPublicSpendKey: SIMULATION_MONERO_PUBLIC_SPEND_KEY,
+  moneroPrivateViewKey: SIMULATION_MONERO_PRIVATE_VIEW_KEY,
   webhookSecret: 'secure-hmac-secret-2026',
   webhookUrl: 'http://localhost:3000/webhook',
   defaultExpirationMinutes: 15,
@@ -39,6 +47,24 @@ app.post('/checkout', async (_req: Request, res: Response) => {
     
     res.status(200).json({
       message: 'ZeroPay Invoice Generated Successfully',
+      invoiceData: invoice,
+    });
+  } catch (error) {
+    const errMessage = error instanceof Error ? error.message : 'Internal Server Error';
+    res.status(500).json({ error: errMessage });
+  }
+});
+
+/**
+ * Route: POST /checkout/monero
+ * Generates a privacy-preserving Monero (XMR) invoice with a unique Subaddress.
+ */
+app.post('/checkout/monero', async (_req: Request, res: Response) => {
+  try {
+    const invoice = await zeroPay.createInvoice('1.25', Currency.XMR, Network.MONERO);
+
+    res.status(200).json({
+      message: 'ZeroPay Monero (XMR) Invoice Generated Successfully',
       invoiceData: invoice,
     });
   } catch (error) {

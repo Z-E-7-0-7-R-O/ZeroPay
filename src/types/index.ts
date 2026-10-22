@@ -8,12 +8,14 @@ export enum Currency {
   TRX = 'TRX',
   LTC = 'LTC',
   DOGE = 'DOGE',
+  XMR = 'XMR',
 }
 
 export enum Network {
   TRON = 'TRON',
   LITECOIN = 'LITECOIN',
   DOGECOIN = 'DOGECOIN',
+  MONERO = 'MONERO',
 }
 
 export enum InvoiceStatus {
@@ -28,14 +30,20 @@ export interface IZeroPayConfig {
   xpubLitecoin?: string;
   xpubDogecoin?: string;
   xpubTron?: string;
+
+  moneroPublicSpendKey?: string; // 32-byte Ed25519 public spend key (64 hex chars)
+  moneroPrivateViewKey?: string; // 32-byte Ed25519 private view key (64 hex chars)
   
   webhookSecret: string;
   webhookUrl?: string;
   
   tronRpcUrl?: string; // Default can be public node, but configurable for enterprise
   tronApiKey?: string;
+
+  moneroRpcUrl?: string; // Monero daemon JSON-RPC URL
+  moneroWalletRpcUrl?: string; // Optional watch-only monero-wallet-rpc endpoint
   
-  defaultConfirmations?: number; // E.g., 1 for LTC, 12 for TRON
+  defaultConfirmations?: number; // E.g., 1 for LTC, 12 for TRON, 10 for MONERO
   defaultExpirationMinutes?: number;
 }
 
@@ -73,13 +81,23 @@ export interface IStorageAdapter {
   /**
    * Updates the state of an existing invoice (e.g., PENDING to CONFIRMED).
    */
-  updateInvoiceStatus(id: string, status: InvoiceStatus, txHash?: string): Promise<void>;
+  updateInvoiceStatus(
+    id: string,
+    status: InvoiceStatus,
+    txHash?: string,
+    confirmations?: number,
+  ): Promise<void>;
 
   /**
    * Atomically retrieves and increments the derivation index for a specific network.
    * This ensures that two concurrent invoice requests do not generate the same receiving address.
    */
   getLatestDerivationIndex(network: Network): Promise<number>;
+
+  /**
+   * Retrieves all invoices currently in PENDING or DETECTED status for the polling loop.
+   */
+  getActiveInvoices(): Promise<IInvoice[]>;
 }
 
 export interface IAddressGenerationResult {

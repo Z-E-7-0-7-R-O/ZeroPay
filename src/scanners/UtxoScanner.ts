@@ -5,6 +5,7 @@
 
 import axios, { AxiosInstance } from 'axios';
 import { IInvoice, IZeroPayConfig, InvoiceStatus, Network } from '../types';
+import { CryptoUtils } from '../utils/crypto';
 
 export class UtxoScanner {
   private apiClient: AxiosInstance;
@@ -50,9 +51,9 @@ export class UtxoScanner {
 
       const data = response.data;
       
-      // Convert the decimal invoice amount to base units (Satoshis)
-      // 1 LTC/DOGE = 100,000,000 base units
-      const expectedBaseUnits = Math.floor(parseFloat(invoice.amount) * 100_000_000);
+      // Convert the decimal invoice amount to exact base units (Satoshis)
+      // 1 LTC/DOGE = 100,000,000 base units (8 decimals)
+      const expectedBaseUnits = Number(CryptoUtils.amountToBaseUnits(invoice.amount, 8));
 
       // 1. Check Unconfirmed Transactions (Mempool)
       if (data.unconfirmed_txrefs && Array.isArray(data.unconfirmed_txrefs)) {

@@ -10,8 +10,10 @@ import * as ecc from 'tiny-secp256k1';
 
 import { UtxoEngine } from '../src/engines/UtxoEngine';
 import { TrvmEngine } from '../src/engines/TrvmEngine';
+import { CryptonoteEngine } from '../src/engines/CryptonoteEngine';
 import { AddressGenerator } from '../src/engines/AddressGenerator';
 import { CryptoUtils } from '../src/utils/crypto';
+import { MoneroCryptoUtils } from '../src/utils/moneroCrypto';
 import { Network, IZeroPayConfig } from '../src/types';
 
 const bip32 = BIP32Factory(ecc);
@@ -39,6 +41,8 @@ describe('Cryptographic Address Derivation Engines', () => {
   let ltcXpub: string;
   let dogeXpub: string;
   let tronXpub: string;
+  let moneroPublicSpendKey: string;
+  let moneroPrivateViewKey: string;
 
   beforeAll(() => {
     // Generate mathematically valid xPubs dynamically from cryptographic seed entropy
@@ -58,6 +62,16 @@ describe('Cryptographic Address Derivation Engines', () => {
     const tronMaster = bip32.fromSeed(seed);
     const tronAccount = tronMaster.derivePath("m/44'/195'/0'");
     tronXpub = tronAccount.neutered().toBase58();
+
+    // Monero Ed25519 Dual-Key Pair (Public Spend Key B and Private View Key a)
+    const spendScalar = MoneroCryptoUtils.scReduce32ToBigInt(crypto.randomBytes(32));
+    const viewScalar = MoneroCryptoUtils.scReduce32ToBigInt(crypto.randomBytes(32));
+    moneroPublicSpendKey = MoneroCryptoUtils.bytesToHex(
+      MoneroCryptoUtils.scalarMultBase(spendScalar),
+    );
+    moneroPrivateViewKey = MoneroCryptoUtils.bytesToHex(
+      MoneroCryptoUtils.bigIntToBytesLE(viewScalar, 32),
+    );
   });
 
   describe('UtxoEngine', () => {
@@ -118,25 +132,80 @@ describe('Cryptographic Address Derivation Engines', () => {
     });
   });
 
+  describe('CryptonoteEngine (Monero)', () => {
+    it('should derive valid 95-character Monero Subaddresses starting with 8', () => {
+      const subaddr0 = CryptonoteEngine.generateAddress(
+        moneroPublicSpendKey,
+        moneroPrivateViewKey,
+        0,
+        Network.MONERO,
+      );
+      const subaddr1 = CryptonoteEngine.generateAddress(
+        moneroPublicSpendKey,
+        moneroPrivateViewKey,
+        1,
+        Network.MONERO,
+      );
+
+      expect(subaddr0).toBeDefined();
+      expect(subaddr0.startsWith('8')).toBe(true);
+      expect(subaddr0.length).toBe(95);
+      expect(CryptoUtils.isValidMoneroAddress(subaddr0)).toBe(true);
+
+      expect(subaddr1).toBeDefined();
+      expect(subaddr1.startsWith('8')).toBe(true);
+      expect(subaddr1.length).toBe(95);
+      expect(CryptoUtils.isValidMoneroAddress(subaddr1)).toBe(true);
+      expect(subaddr0).not.toEqual(subaddr1);
+    });
+
+    it('should generate a valid 95-character Monero Primary Address starting with 4', () => {
+      const primaryAddress = CryptonoteEngine.generatePrimaryAddress(
+        moneroPublicSpendKey,
+        moneroPrivateViewKey,
+      );
+
+      expect(primaryAddress.startsWith('4')).toBe(true);
+      expect(primaryAddress.length).toBe(95);
+      expect(CryptoUtils.isValidMoneroAddress(primaryAddress)).toBe(true);
+    });
+
+    it('should throw an error if a non-MONERO network is passed to CryptonoteEngine', () => {
+      expect(() => {
+        CryptonoteEngine.generateAddress(
+          moneroPublicSpendKey,
+          moneroPrivateViewKey,
+          0,
+          Network.TRON,
+        );
+      }).toThrow('Unsupported network requested in CryptonoteEngine');
+    });
+  });
+
   describe('AddressGenerator Facade', () => {
     it('should route derivation requests correctly across all supported networks', () => {
       const config: IZeroPayConfig = {
         xpubLitecoin: ltcXpub,
         xpubDogecoin: dogeXpub,
         xpubTron: tronXpub,
+        moneroPublicSpendKey,
+        moneroPrivateViewKey,
         webhookSecret: 'test-secret',
       };
 
       const ltcAddress = AddressGenerator.generate(config, Network.LITECOIN, 0);
       const dogeAddress = AddressGenerator.generate(config, Network.DOGECOIN, 0);
       const tronAddress = AddressGenerator.generate(config, Network.TRON, 0);
+      const moneroAddress = AddressGenerator.generate(config, Network.MONERO, 0);
 
       expect(ltcAddress.startsWith('ltc1')).toBe(true);
       expect(dogeAddress.startsWith('D')).toBe(true);
       expect(tronAddress.startsWith('T')).toBe(true);
+      expect(moneroAddress.startsWith('8')).toBe(true);
+      expect(moneroAddress.length).toBe(95);
     });
 
-    it('should throw explicit error when an xPub is missing from the configuration', () => {
+    it('should throw explicit error when an xPub or Monero key pair is missing from the configuration', () => {
       const incompleteConfig: IZeroPayConfig = {
         webhookSecret: 'test-secret',
       };
@@ -144,6 +213,10 @@ describe('Cryptographic Address Derivation Engines', () => {
       expect(() => {
         AddressGenerator.generate(incompleteConfig, Network.LITECOIN, 0);
       }).toThrow('Litecoin xPub is missing in the configuration.');
+
+      expect(() => {
+        AddressGenerator.generate(incompleteConfig, Network.MONERO, 0);
+      }).toThrow('Monero public spend key or private view key is missing in the configuration.');
     });
   });
 
@@ -159,6 +232,23 @@ describe('Cryptographic Address Derivation Engines', () => {
 
       // If any collision occurred, Set size would be strictly less than totalCount
       expect(generatedAddresses.size).toBe(totalCount);
+    });
+
+    it('should derive 100 consecutive Monero subaddresses with 100% uniqueness', () => {
+      const generatedMoneroAddresses = new Set<string>();
+      const totalCount = 100;
+
+      for (let index = 0; index < totalCount; index++) {
+        const subaddress = CryptonoteEngine.generateAddress(
+          moneroPublicSpendKey,
+          moneroPrivateViewKey,
+          index,
+          Network.MONERO,
+        );
+        generatedMoneroAddresses.add(subaddress);
+      }
+
+      expect(generatedMoneroAddresses.size).toBe(totalCount);
     });
   });
 });

@@ -28,12 +28,20 @@ export class MemoryStorage implements IStorageAdapter {
     return null;
   }
 
-  public async updateInvoiceStatus(id: string, status: InvoiceStatus, txHash?: string): Promise<void> {
+  public async updateInvoiceStatus(
+    id: string,
+    status: InvoiceStatus,
+    txHash?: string,
+    confirmations?: number,
+  ): Promise<void> {
     const invoice = this.invoices.get(id);
     if (invoice) {
       invoice.status = status;
-      if (txHash) {
+      if (txHash !== undefined) {
         invoice.txHash = txHash;
+      }
+      if (confirmations !== undefined) {
+        invoice.confirmations = confirmations;
       }
       this.invoices.set(id, invoice);
     }

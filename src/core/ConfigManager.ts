@@ -9,6 +9,7 @@ export class ConfigManager {
   private static readonly DEFAULT_EXPIRATION_MINUTES = 60;
   private static readonly DEFAULT_CONFIRMATIONS = 1;
   private static readonly DEFAULT_TRON_RPC_URL = 'https://api.trongrid.io';
+  private static readonly DEFAULT_MONERO_RPC_URL = 'https://xmr-node.cakewallet.com:18081';
 
   /**
    * Validates and normalizes the provided ZeroPay configuration.
@@ -45,6 +46,15 @@ export class ConfigManager {
       this.validateUrl(config.tronRpcUrl, 'tronRpcUrl');
     }
 
+    // Monero RPC URL Validation
+    if (config.moneroRpcUrl) {
+      this.validateUrl(config.moneroRpcUrl, 'moneroRpcUrl');
+    }
+
+    if (config.moneroWalletRpcUrl) {
+      this.validateUrl(config.moneroWalletRpcUrl, 'moneroWalletRpcUrl');
+    }
+
     // Extended Public Key Format Checks
     if (config.xpubLitecoin) {
       this.validateXpubFormat(config.xpubLitecoin, 'xpubLitecoin');
@@ -56,6 +66,21 @@ export class ConfigManager {
 
     if (config.xpubTron) {
       this.validateXpubFormat(config.xpubTron, 'xpubTron');
+    }
+
+    // Monero Dual-Key Completeness and Format Checks
+    const hasSpendKey = config.moneroPublicSpendKey !== undefined;
+    const hasViewKey = config.moneroPrivateViewKey !== undefined;
+
+    if (hasSpendKey !== hasViewKey) {
+      throw new Error(
+        'Invalid configuration: Both "moneroPublicSpendKey" and "moneroPrivateViewKey" must be provided together for Monero operations.',
+      );
+    }
+
+    if (config.moneroPublicSpendKey !== undefined && config.moneroPrivateViewKey !== undefined) {
+      this.validateMoneroKeyFormat(config.moneroPublicSpendKey, 'moneroPublicSpendKey');
+      this.validateMoneroKeyFormat(config.moneroPrivateViewKey, 'moneroPrivateViewKey');
     }
 
     // Numerical Parameter Constraints
@@ -79,6 +104,7 @@ export class ConfigManager {
     return {
       ...config,
       tronRpcUrl: config.tronRpcUrl || this.DEFAULT_TRON_RPC_URL,
+      moneroRpcUrl: config.moneroRpcUrl || this.DEFAULT_MONERO_RPC_URL,
       defaultExpirationMinutes: config.defaultExpirationMinutes ?? this.DEFAULT_EXPIRATION_MINUTES,
       defaultConfirmations: config.defaultConfirmations ?? this.DEFAULT_CONFIRMATIONS,
     };
@@ -107,6 +133,21 @@ export class ConfigManager {
     // Standard serialized BIP32 extended keys span between 100 and 120 characters depending on encoding
     if (trimmed.length < 100 || trimmed.length > 120) {
       throw new Error(`Invalid configuration: "${fieldName}" does not conform to the expected length for an Extended Public Key.`);
+    }
+  }
+
+  /**
+   * Validates structural format of 32-byte Monero Ed25519 keys (64 hexadecimal characters).
+   */
+  private static validateMoneroKeyFormat(keyHex: string, fieldName: string): void {
+    if (typeof keyHex !== 'string') {
+      throw new Error(`Invalid configuration: "${fieldName}" must be a valid string.`);
+    }
+    const trimmed = keyHex.trim();
+    if (!/^[0-9a-fA-F]{64}$/.test(trimmed)) {
+      throw new Error(
+        `Invalid configuration: "${fieldName}" must be a 64-character hexadecimal string representing a 32-byte Monero key.`,
+      );
     }
   }
 }

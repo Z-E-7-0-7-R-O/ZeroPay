@@ -9,6 +9,17 @@ import { AbiDecoder } from '../src/security/AbiDecoder';
 import { StateQueryValidator } from '../src/security/StateQueryValidator';
 import { ConsensusFinalityValidator } from '../src/security/ConsensusFinalityValidator';
 import { AntiCounterfeitEngine, IRawTronTransactionData } from '../src/security/AntiCounterfeitEngine';
+import { MoneroKeyValidator } from '../src/security/MoneroKeyValidator';
+import { MoneroTimelockValidator } from '../src/security/MoneroTimelockValidator';
+import { StealthOutputVerifier } from '../src/security/StealthOutputVerifier';
+import { RingCtVerifier } from '../src/security/RingCtVerifier';
+import { MoneroFinalityValidator } from '../src/security/MoneroFinalityValidator';
+import {
+  MoneroAntiSpoofEngine,
+  IRawMoneroTransactionData,
+} from '../src/security/MoneroAntiSpoofEngine';
+import { CryptonoteEngine } from '../src/engines/CryptonoteEngine';
+import { MoneroCryptoUtils } from '../src/utils/moneroCrypto';
 import { HttpClient } from '../src/utils/http';
 import { IInvoice, InvoiceStatus, Currency, Network, IZeroPayConfig } from '../src/types';
 
@@ -269,6 +280,286 @@ describe('Anti-Counterfeit & Anti-Flash Subsystem', () => {
       const result = await engine.verify(unsolidifiedTx, sampleInvoice);
       expect(result.isValid).toBe(false);
       expect(result.layerFailed).toBe(5);
+    });
+  });
+
+  describe('Monero 5-Layer Anti-Spoofing & RingCT Verification Subsystem', () => {
+    let moneroPublicSpendKey: string;
+    let moneroPrivateViewKey: string;
+    let targetSubaddress: string;
+    let txPublicKeyHex: string;
+    let outputStealthKeyHex: string;
+    let outputScalarHex: string;
+    let encryptedAmountHex: string;
+    let commitmentHex: string;
+    const outputIndex = 0;
+
+    beforeAll(() => {
+      // Deterministic test scalars for merchant keys
+      const spendScalar = 1234567890123456789n;
+      const viewScalar = 9876543210987654321n;
+
+      moneroPublicSpendKey = MoneroCryptoUtils.bytesToHex(
+        MoneroCryptoUtils.scalarMultBase(spendScalar),
+      );
+      moneroPrivateViewKey = MoneroCryptoUtils.bytesToHex(
+        MoneroCryptoUtils.bigIntToBytesLE(viewScalar, 32),
+      );
+
+      // Derive subaddress for invoice index 0 (Minor Index 1)
+      const subaddrKeys = CryptonoteEngine.deriveSubaddressKeys(
+        moneroPublicSpendKey,
+        moneroPrivateViewKey,
+        0,
+      );
+      targetSubaddress = subaddrKeys.address;
+
+      // Simulate sender constructing a genuine Monero RingCT output for 2.50 XMR (2,500,000,000,000 Piconero)
+      const txEphemeralScalarR = 5555555555555555555n;
+      txPublicKeyHex = MoneroCryptoUtils.bytesToHex(
+        MoneroCryptoUtils.scalarMultBase(txEphemeralScalarR),
+      );
+
+      // Shared secret derivation D_ecdh = 8 * a * R
+      const keyDerivationBytes = MoneroCryptoUtils.generateKeyDerivation(
+        txPublicKeyHex,
+        moneroPrivateViewKey,
+      );
+      const outputScalar = MoneroCryptoUtils.deriveOutputScalar(keyDerivationBytes, outputIndex);
+      outputScalarHex = MoneroCryptoUtils.bytesToHex(
+        MoneroCryptoUtils.bigIntToBytesLE(outputScalar, 32),
+      );
+
+      // One-time stealth output key P_k = s_k * G + D_subaddr
+      const sG = MoneroCryptoUtils.scalarMultBase(outputScalar);
+      const subaddrSpendBytes = MoneroCryptoUtils.hexToBytes(
+        subaddrKeys.subaddressPublicSpendKeyHex,
+      );
+      outputStealthKeyHex = MoneroCryptoUtils.bytesToHex(
+        MoneroCryptoUtils.pointAdd(sG, subaddrSpendBytes),
+      );
+
+      // Encrypt 2.50 XMR in Piconero and compute Pedersen Commitment
+      const amountPiconero = BigInt('2500000000000');
+      encryptedAmountHex = RingCtVerifier.encryptRingCtAmount(amountPiconero, outputScalarHex);
+      commitmentHex = RingCtVerifier.computePedersenCommitment(amountPiconero, outputScalarHex);
+    });
+
+    describe('Monero Layer 1: MoneroKeyValidator', () => {
+      it('should approve valid torsion-free Ed25519 public keys', () => {
+        expect(
+          MoneroKeyValidator.validateTransactionKeys(
+            txPublicKeyHex,
+            outputStealthKeyHex,
+            commitmentHex,
+          ),
+        ).toBe(true);
+      });
+
+      it('should reject identity or small-order torsion curve points', () => {
+        const identityPointHex =
+          '0100000000000000000000000000000000000000000000000000000000000000';
+        expect(MoneroKeyValidator.isSafePublicKey(identityPointHex)).toBe(false);
+        expect(MoneroKeyValidator.isSafePublicKey('invalid-hex')).toBe(false);
+      });
+    });
+
+    describe('Monero Layer 2: MoneroTimelockValidator', () => {
+      it('should approve standard unlocked transactions with no failure flags', () => {
+        expect(
+          MoneroTimelockValidator.isExecutionAndTimelockSafe({
+            unlockTime: 0,
+            doubleSpendSeen: false,
+            failed: false,
+          }),
+        ).toBe(true);
+      });
+
+      it('should reject transactions flagged with double_spend_seen or failed', () => {
+        expect(
+          MoneroTimelockValidator.isExecutionAndTimelockSafe({
+            unlockTime: 0,
+            doubleSpendSeen: true,
+          }),
+        ).toBe(false);
+
+        expect(
+          MoneroTimelockValidator.isExecutionAndTimelockSafe({
+            unlockTime: 0,
+            failed: true,
+          }),
+        ).toBe(false);
+      });
+
+      it('should reject malicious future block or timestamp unlock_time values', () => {
+        // Malicious future block lock
+        expect(
+          MoneroTimelockValidator.isExecutionAndTimelockSafe(
+            { unlockTime: 3_500_000 },
+            3_000_000,
+          ),
+        ).toBe(false);
+
+        // Malicious future Unix timestamp lock (year 2100)
+        expect(
+          MoneroTimelockValidator.isExecutionAndTimelockSafe({
+            unlockTime: 4_102_444_800,
+          }),
+        ).toBe(false);
+      });
+    });
+
+    describe('Monero Layer 3: StealthOutputVerifier', () => {
+      it('should cryptographically prove stealth output ownership for the target subaddress', () => {
+        const result = StealthOutputVerifier.verifyOutputOwnership(
+          txPublicKeyHex,
+          outputStealthKeyHex,
+          outputIndex,
+          moneroPrivateViewKey,
+          targetSubaddress,
+        );
+
+        expect(result.isOwned).toBe(true);
+        expect(result.outputScalarHex).toBe(outputScalarHex);
+      });
+
+      it('should reject stealth output when checked against a different subaddress', () => {
+        const otherSubaddress = CryptonoteEngine.generateAddress(
+          moneroPublicSpendKey,
+          moneroPrivateViewKey,
+          5,
+          Network.MONERO,
+        );
+
+        const result = StealthOutputVerifier.verifyOutputOwnership(
+          txPublicKeyHex,
+          outputStealthKeyHex,
+          outputIndex,
+          moneroPrivateViewKey,
+          otherSubaddress,
+        );
+
+        expect(result.isOwned).toBe(false);
+      });
+    });
+
+    describe('Monero Layer 4: RingCtVerifier', () => {
+      it('should decrypt RingCT amount and validate Pedersen Commitment C = yG + bH', () => {
+        const result = RingCtVerifier.verifyRingCtPayment(
+          encryptedAmountHex,
+          outputScalarHex,
+          '2.50',
+          commitmentHex,
+        );
+
+        expect(result.isValid).toBe(true);
+        expect(result.decryptedAmountPiconero?.toString()).toBe('2500000000000');
+      });
+
+      it('should reject RingCT payment if decrypted amount is less than invoice requirement', () => {
+        const result = RingCtVerifier.verifyRingCtPayment(
+          encryptedAmountHex,
+          outputScalarHex,
+          '5.00',
+          commitmentHex,
+        );
+
+        expect(result.isValid).toBe(false);
+      });
+
+      it('should reject RingCT payment if Pedersen Commitment is forged', () => {
+        const forgedCommitment = MoneroCryptoUtils.bytesToHex(
+          MoneroCryptoUtils.scalarMultBase(999n),
+        );
+        const result = RingCtVerifier.verifyRingCtPayment(
+          encryptedAmountHex,
+          outputScalarHex,
+          '2.50',
+          forgedCommitment,
+        );
+
+        expect(result.isValid).toBe(false);
+      });
+    });
+
+    describe('Monero Layer 5 & MoneroAntiSpoofEngine Orchestrator', () => {
+      let mockHttpClient: HttpClient;
+      let moneroEngine: MoneroAntiSpoofEngine;
+      let moneroInvoice: IInvoice;
+
+      beforeEach(() => {
+        mockHttpClient = new HttpClient();
+        jest.spyOn(mockHttpClient, 'get').mockResolvedValue({
+          data: { height: 3_200_015, status: 'OK' },
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+          config: {},
+        } as never);
+
+        const config: IZeroPayConfig = {
+          webhookSecret: 'test-secret',
+          moneroPublicSpendKey,
+          moneroPrivateViewKey,
+        };
+        moneroEngine = new MoneroAntiSpoofEngine(config, mockHttpClient);
+
+        moneroInvoice = {
+          id: 'monero-invoice-1',
+          amount: '2.50',
+          currency: Currency.XMR,
+          network: Network.MONERO,
+          receivingAddress: targetSubaddress,
+          derivationIndex: 0,
+          status: InvoiceStatus.PENDING,
+          confirmations: 0,
+          createdAt: Date.now(),
+          expiresAt: Date.now() + 3600000,
+        };
+      });
+
+      it('should approve a valid Monero transaction passing all 5 cryptographic layers', async () => {
+        const validTx: IRawMoneroTransactionData = {
+          transactionId: 'tx_xmr_valid_001',
+          txPublicKeyHex,
+          outputIndex,
+          outputStealthKeyHex,
+          encryptedAmountHex,
+          commitmentHex,
+          executionState: { unlockTime: 0, doubleSpendSeen: false },
+          blockHeight: 3_200_005, // 11 confirmations at height 3,200,015
+          inPool: false,
+        };
+
+        const result = await moneroEngine.verify(validTx, moneroInvoice, 10);
+        expect(result.isValid).toBe(true);
+        expect(result.confirmations).toBe(11);
+        expect(result.decryptedAmountPiconero?.toString()).toBe('2500000000000');
+      });
+
+      it('should fail at Layer 5 if transaction confirmation depth is below requirement', async () => {
+        const shallowBlockTx: IRawMoneroTransactionData = {
+          transactionId: 'tx_xmr_shallow_002',
+          txPublicKeyHex,
+          outputIndex,
+          outputStealthKeyHex,
+          encryptedAmountHex,
+          commitmentHex,
+          executionState: { unlockTime: 0 },
+          blockHeight: 3_200_014, // Only 2 confirmations
+          inPool: false,
+        };
+
+        const validator = new MoneroFinalityValidator(
+          'https://xmr-node.cakewallet.com:18081',
+          mockHttpClient,
+        );
+        expect(await validator.isTransactionFinalized(3_200_014, 10)).toBe(false);
+
+        const result = await moneroEngine.verify(shallowBlockTx, moneroInvoice, 10);
+        expect(result.isValid).toBe(false);
+        expect(result.layerFailed).toBe(5);
+      });
     });
   });
 });

@@ -16,6 +16,11 @@ const mockedAxios = axios as jest.Mocked<typeof axios>;
 
 describe('Core Orchestration and Utilities', () => {
   const validMockXpub = 'xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8';
+  // Ed25519 base point G and a valid 32-byte scalar in hexadecimal
+  const validMoneroPublicSpendKey =
+    '5866666666666666666666666666666666666666666666666666666666666666';
+  const validMoneroPrivateViewKey =
+    '0100000000000000000000000000000000000000000000000000000000000000';
 
   describe('ConfigManager', () => {
     it('should validate complete configuration and apply deterministic defaults', () => {
@@ -53,6 +58,30 @@ describe('Core Orchestration and Utilities', () => {
           xpubTron: 'too-short-xpub',
         });
       }).toThrow('does not conform to the expected length for an Extended Public Key');
+    });
+
+    it('should validate Monero key pairs and reject incomplete or malformed keys', () => {
+      const processed = ConfigManager.process({
+        webhookSecret: 'key',
+        moneroPublicSpendKey: validMoneroPublicSpendKey,
+        moneroPrivateViewKey: validMoneroPrivateViewKey,
+      });
+      expect(processed.moneroRpcUrl).toBe('https://xmr-node.cakewallet.com:18081');
+
+      expect(() => {
+        ConfigManager.process({
+          webhookSecret: 'key',
+          moneroPublicSpendKey: validMoneroPublicSpendKey,
+        });
+      }).toThrow('Both "moneroPublicSpendKey" and "moneroPrivateViewKey" must be provided together');
+
+      expect(() => {
+        ConfigManager.process({
+          webhookSecret: 'key',
+          moneroPublicSpendKey: 'short-hex',
+          moneroPrivateViewKey: validMoneroPrivateViewKey,
+        });
+      }).toThrow('must be a 64-character hexadecimal string');
     });
   });
 
@@ -201,6 +230,39 @@ describe('Core Orchestration and Utilities', () => {
       expect(invoice.receivingAddress.startsWith('T')).toBe(true);
       expect(invoice.derivationIndex).toBe(0);
       expect(invoice.status).toBe(InvoiceStatus.PENDING);
+    });
+
+    it('should construct a Monero (XMR) invoice with a valid 95-character subaddress', async () => {
+      const config: IZeroPayConfig = {
+        webhookSecret: 'secret-123',
+        moneroPublicSpendKey: validMoneroPublicSpendKey,
+        moneroPrivateViewKey: validMoneroPrivateViewKey,
+      };
+
+      const client = new ZeroPayClient(config);
+      const xmrInvoice = await client.createInvoice('1.50', Currency.XMR, Network.MONERO);
+
+      expect(xmrInvoice.id).toBeDefined();
+      expect(xmrInvoice.amount).toBe('1.50');
+      expect(xmrInvoice.currency).toBe(Currency.XMR);
+      expect(xmrInvoice.network).toBe(Network.MONERO);
+      expect(xmrInvoice.receivingAddress.startsWith('8')).toBe(true);
+      expect(xmrInvoice.receivingAddress.length).toBe(95);
+      expect(xmrInvoice.derivationIndex).toBe(0);
+    });
+
+    it('should reject incompatible currency and network combinations', async () => {
+      const config: IZeroPayConfig = {
+        webhookSecret: 'secret-123',
+        xpubTron: validMockXpub,
+        moneroPublicSpendKey: validMoneroPublicSpendKey,
+        moneroPrivateViewKey: validMoneroPrivateViewKey,
+      };
+
+      const client = new ZeroPayClient(config);
+      await expect(client.createInvoice('10.00', Currency.XMR, Network.TRON)).rejects.toThrow(
+        'Incompatible currency and network combination',
+      );
     });
 
     it('should manage polling cycle interval state safely', () => {
